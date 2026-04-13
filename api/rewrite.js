@@ -1,3 +1,28 @@
+const rateLimit = new Map()
+
+function isRateLimited(ip) {
+    const now = Date.now()
+    const windowMs = 60 * 1000 // 1 phút
+    const maxRequests = 10 // tối đa 10 request/phút/IP
+
+    if (!rateLimit.has(ip)) {
+        rateLimit.set(ip, { count: 1, start: now })
+        return false
+    }
+
+    const data = rateLimit.get(ip)
+
+    if (now - data.start > windowMs) {
+        rateLimit.set(ip, { count: 1, start: now })
+        return false
+    }
+
+    if (data.count >= maxRequests) return true
+
+    data.count++
+    return false
+}
+
 export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -11,6 +36,12 @@ export default async function handler(req, res) {
     if (req.method !== "POST") {
         res.status(405).end()
         return
+    }
+
+    // Rate limit theo IP
+    const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown"
+    if (isRateLimited(ip)) {
+        return res.status(429).json({ error: "Quá nhiều request, thử lại sau 1 phút." })
     }
 
     const { text } = req.body
